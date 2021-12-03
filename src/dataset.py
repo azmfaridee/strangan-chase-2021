@@ -52,7 +52,7 @@ class ActivityDataset(data.Dataset):
 
         :param datamat: expects the windowed data already preprocessed it should be of shape (n_samples, n_channels*window_size+1)
         :param window_size: window length used in the sliding window preprocessing script
-        :param n_channel: number of IMU channels, e.g. 3 for accelerometer, gyroscope, magnetometer
+        :param n_channel: number of IMU channels, e.g. 3 when only using accelerometer
         :param scaling: whether to scale the data or not
         :param lencoder: label encoder, if None, one will be created, use the same one across train and test dataset
         :param shuffle: whether to shuffle the dataset or not
