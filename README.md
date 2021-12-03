@@ -4,6 +4,11 @@ This repo provides PyTorch implementation of the following IEEE/ACM CHASE 2021 p
 
 * [STranGAN: Adversarially-Learnt Spatial Transformer for Scalable Human Activity Recognition](https://doi.org/10.1016/j.smhl.2021.100226)
 
+## Overview
+<p align="center">
+  <img src="https://raw.githubusercontent.com/azmfaridee/strangan-chase-2021/main/img/overview-strangan.png" width="800">
+</p>
+
 ## Abstract
 
 We tackle the problem of domain adaptation for inertial sensing-based human activity recognition (HAR) applications
