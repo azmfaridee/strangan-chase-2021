@@ -117,5 +117,5 @@ If you have any questions, please feel free to reach out over email through `far
 
 ## Acknowledgements
 
-This research is supported by NSF CAREER grant 1750936, U.S. Army grant W911NF2120076, ONR grant N00014-18-1-2462, and
-Alzheimer’s Association grant AARG-17-533039.
+This research is supported by NSF CAREER grant `1750936`, U.S. Army grant `W911NF2120076`, ONR grant `N00014-18-1-2462`, and
+Alzheimer’s Association grant `AARG-17-533039`.
