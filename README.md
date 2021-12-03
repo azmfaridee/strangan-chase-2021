@@ -41,7 +41,7 @@ Empirical results using three publicly available benchmark datasets indicate tha
 
 ## Installation
 
-This repo was tested with Ubuntu 20.04, Python 3.8.10, PyTorch 1.9.0+cu111, and CUDA 11.2
+This repo was tested with Ubuntu `20.04`, Python `3.8.10`, PyTorch `1.9.0+cu111`, and CUDA `11.2`
 
 1. Clone this repo with:
    ```shell
