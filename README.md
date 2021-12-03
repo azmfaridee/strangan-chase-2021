@@ -1,6 +1,6 @@
 # STranGAN
 
-This repo provides PyTorch implementation of the following IEEE/ACM CHASE 2021 paper:
+This repository provides PyTorch implementation of the following IEEE/ACM CHASE 2021 paper:
 
 * [STranGAN: Adversarially-Learnt Spatial Transformer for Scalable Human Activity Recognition](https://doi.org/10.1016/j.smhl.2021.100226)
 
