@@ -113,7 +113,7 @@ If you find this repository useful in your research, please consider citing our 
 
 ## Contact
 
-If you have any questions, please feel free to reach out over email through `faridee1@umbc.edu`
+If you have any questions, please feel free to reach out over email via `faridee1@umbc.edu`
 
 ## Acknowledgements
 
