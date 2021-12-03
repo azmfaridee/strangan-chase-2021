@@ -51,7 +51,7 @@ This repo was tested with Ubuntu 20.04, Python 3.8.10, PyTorch 1.9.0+cu111, and 
 
 2. _Optional:_ you can consider setting up a docker environment. Here is a
    nice [set of scripts](https://github.com/mpsc-lab-umbc/docker-scripts/blob/master/README.md) on getting started with the
-   same ML environment we used with docker.
+   same ML environment we used with docker. Alternatively, you can setup your own `conda` or `Virtualenv`.
 
 3. Install packages:
     ```shell
