@@ -121,7 +121,7 @@ class StranGAN(object):
             y_true, y_pred, average='micro')
 
         logger.info(
-            f'Eval {stage} loss={loss:.6f} acc={acc * 100:3.2f}% {correct:5d}/{len(test_loader.dataset):5d} f1={f1:.4f}')
+            f'CLF eval {stage} loss={loss:.6f} acc={acc * 100:3.2f}% {correct:5d}/{len(test_loader.dataset):5d} f1={f1:.4f}')
 
         return {
             'loss'     : loss,
@@ -132,70 +132,67 @@ class StranGAN(object):
             'support'  : support
         }
 
-    def train_clf(self, source_loader, target_loader, args):
+    def train_clf(self, source_loader_train, source_loader_val, target_loader_val, args):
         """
             Trains the source classifier
         """
+
+        source_metrics_train = {}
+        source_metrics_val = {}
+        target_metrics_val = {}
 
         if args.clf_ckpt != '' and os.path.exists(args.clf_ckpt):
             logger.info(f'Loading Classifier from {args.clf_ckpt} ...')
             self.classifier.load_state_dict(torch.load(args.clf_ckpt))
             logger.success('Model loaded!')
-            self.test(self.classifier, source_loader, 'source')
-            self.test(self.classifier, target_loader, 'target')
-            return
+            source_metrics_train = self.test(self.classifier, source_loader_train, 'source (train)')
+            source_metrics_val = self.test(self.classifier, source_loader_val, 'source (val)  ')
+            target_metrics_val = self.test(self.classifier, target_loader_val, 'target (val)  ')
+        else:
+            for epoch in range(1, args.n_epochs + 1):
+                ts = time.time()
+                self.classifier.train()
+                for batch_idx, (X_source, y_source) in enumerate(source_loader_train):
+                    X_source = X_source.to(self.device).float()
+                    y_source = y_source.to(self.device)
 
-        source_metrics = collections.defaultdict(float)
-        target_metrics = collections.defaultdict(float)
-        for epoch in range(1, args.n_epochs + 1):
-            ts = time.time()
-            self.classifier.train()
-            for batch_idx, (X_source, y_source) in enumerate(source_loader):
-                X_source = X_source.to(self.device).float()
-                y_source = y_source.to(self.device)
+                    self.optim_c.zero_grad()
+                    y_source_pred = self.classifier(X_source)
 
-                self.optim_c.zero_grad()
-                y_source_pred = self.classifier(X_source)
+                    loss_fc = self.clf_loss(y_source_pred, y_source)
+                    loss_fc.backward()
+                    self.optim_c.step()
 
-                loss_fc = self.clf_loss(y_source_pred, y_source)
-                loss_fc.backward()
-                self.optim_c.step()
+                    if batch_idx % args.log_interval == 0:
+                        logger.info(
+                            f'CLF train epoch: {epoch:2d} {100. * batch_idx / len(source_loader_train):3.0f}%'
+                            + f' {batch_idx * len(X_source):5d}/{len(source_loader_train.dataset)} lC={loss_fc.item():.6f}'
+                        )
+                te = time.time()
+                logger.info(f'Took {(te - ts):.2f} seconds this epoch')
+                logger.info('------------------------------------------------')
+                source_metrics_train = self.test(self.classifier, source_loader_train, 'source (train)')
+                source_metrics_val = self.test(self.classifier, source_loader_val, 'source (val)  ')
+                target_metrics_val = self.test(self.classifier, target_loader_val, 'target (val)  ')
+                logger.info('------------------------------------------------')
 
-                if batch_idx % args.log_interval == 0:
-                    logger.info(
-                        f'CLF train epoch: {epoch:2d} {100. * batch_idx / len(source_loader):3.0f}%'
-                        + f' {batch_idx * len(X_source):5d}/{len(source_loader.dataset)} lC={loss_fc.item():.6f}'
-                    )
-            te = time.time()
-            logger.info(f'Took {(te - ts):.2f} seconds this epoch')
-            logger.info('------------------------------------------------')
-            source_metrics = self.test(self.classifier, source_loader, 'source')
-            target_metrics = self.test(self.classifier, target_loader, 'target')
-            logger.info('------------------------------------------------')
-
-            save_path = os.path.join(args.save_dir, 'clf.pt')
-            logger.info(f'Saving the Classifier in {save_path}')
-            torch.save(self.classifier.state_dict(), save_path)
+                save_path = os.path.join(args.save_dir, 'clf.pt')
+                logger.info(f'Saving the Classifier in {save_path}')
+                torch.save(self.classifier.state_dict(), save_path)
 
         return {
-            'source_loss'     : source_metrics['loss'],
-            'source_acc'      : source_metrics['acc'],
-            'source_precision': source_metrics['precision'],
-            'source_recall'   : source_metrics['recall'],
-            'source_f1'       : source_metrics['f1'],
-            'target_loss'     : target_metrics['loss'],
-            'target_acc'      : target_metrics['acc'],
-            'target_precision': target_metrics['precision'],
-            'target_recall'   : target_metrics['recall'],
-            'target_f1'       : target_metrics['f1'],
+            'source-train': source_metrics_train,
+            'source-val'  : source_metrics_val,
+            'target-val'  : target_metrics_val
         }
 
-    def train_gan(self, source_loader_inf, target_loader_inf, source_loader,
-                  target_loader, args):
+    def train_gan(self, source_loader_da, target_loader_da, source_loader_clf_train,
+                  source_loader_clf_val,
+                  target_loader_clf_val, args):
         # ----------------------------
         #  First train the source classifier
         # ----------------------------
-        self.train_clf(source_loader, target_loader, args)
+        self.train_clf(source_loader_clf_train, source_loader_clf_val, target_loader_clf_val, args)
 
         best_f1 = 0.0
         # check for resume
@@ -210,7 +207,7 @@ class StranGAN(object):
                 self.discriminator.load_state_dict(torch.load(args.dsc_ckpt))
                 logger.success('Model loaded!')
 
-            _ = self.test(self.classifier, target_loader,
+            _ = self.test(self.classifier, target_loader_clf_val,
                           'target (xformed)', self.generator)
             best_f1 = _['f1']
             logger.info(f'Best result {best_f1}')
@@ -222,11 +219,11 @@ class StranGAN(object):
         fake = torch.ones(args.batch_size, 1, requires_grad=False).to(self.device) * args.soft_label_fake
         valid_alt = torch.ones(args.batch_size, 1, requires_grad=False).to(self.device) * args.soft_label_valid_gen
 
-        source_iterator = iter(source_loader_inf)
-        target_iterator = iter(target_loader_inf)
+        source_iterator = iter(source_loader_da)
+        target_iterator = iter(target_loader_da)
 
         step = 1
-        while target_loader_inf.epoch < args.gan_epochs:
+        while target_loader_da.epoch < args.gan_epochs:
             self.classifier.eval()
             self.discriminator.train()
             self.generator.train()
@@ -292,7 +289,7 @@ class StranGAN(object):
 
             if step % args.log_interval == 0:
                 logger.info(
-                    f"GAN: tgt_epoch:{target_loader_inf.epoch:3d} src_epoch:{source_loader_inf.epoch:3d} step:{step:5d}"
+                    f"GAN tgt_epoch:{target_loader_da.epoch:3d} src_epoch:{source_loader_da.epoch:3d} step:{step:5d}"
                     + f" lD={loss_d.item():.4f}"
                     + f" lG={loss_g.item():.4f} lGr={loss_g_rec.item():.4f} lGa={loss_g_adv.item():.4f}"
                     + f" accD={disc_acc:.4f} gamma={gamma:.2f}")
@@ -300,8 +297,8 @@ class StranGAN(object):
             if step % args.eval_interval == 0:
                 logger.info(
                     '------------------------------------------------------------------------------------------------------------')
-                self.test(self.classifier, source_loader, 'source (transformed):', self.generator)
-                _ = self.test(self.classifier, target_loader, 'target (transformed):', self.generator)
+                self.test(self.classifier, source_loader_clf_val, 'source (val+transformed)', self.generator)
+                _ = self.test(self.classifier, target_loader_clf_val, 'target (val+transformed)', self.generator)
                 logger.info(
                     '------------------------------------------------------------------------------------------------------------')
 
@@ -399,22 +396,37 @@ with np.load(args.data_path, mmap_mode='r', allow_pickle=True) as npz:
         data_target = npz['data_{}_{}'.format(args.subject_target,
                                               args.position_target)]
 
-source_dataset = ActivityDataset(data_source, args.window_size, args.n_channels, args.scaling,
-                                 shuffle=False, train_set=True, train_frac=args.train_frac)
-target_dataset = ActivityDataset(data_target, args.window_size, args.n_channels, args.scaling,
-                                 source_dataset.lencoder, shuffle=False, train_set=False, train_frac=args.train_frac)
+source_train_dataset = ActivityDataset(data_source, args.window_size, args.n_channels, args.scaling,
+                                       shuffle=False, train_set=True, train_frac=args.train_frac)
+lencoder = source_train_dataset.lencoder
+source_val_dataset = ActivityDataset(data_source, args.window_size, args.n_channels, args.scaling, lencoder=lencoder,
+                                     shuffle=False, train_set=False, train_frac=args.train_frac)
 
-ipdb.set_trace()
+target_train_dataset = ActivityDataset(data_target, args.window_size, args.n_channels, args.scaling,
+                                       lencoder=lencoder, shuffle=False, train_set=True,
+                                       train_frac=args.train_frac)
+target_val_dataset = ActivityDataset(data_target, args.window_size, args.n_channels, args.scaling,
+                                     lencoder=lencoder, shuffle=False, train_set=False,
+                                     train_frac=args.train_frac)
 
-source_loader_inf = InfiniteDataLoader(source_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True,
-                                       num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
-target_loader_inf = InfiniteDataLoader(target_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True,
-                                       num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
-source_loader = DataLoader(source_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False,
-                           num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
-target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False,
-                           num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
+# data loader for DA training
+# -----------------------------------------------------------------------------------------------------------------------
+source_loader_da = InfiniteDataLoader(source_train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True,
+                                      num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
+target_loader_da = InfiniteDataLoader(target_train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True,
+                                      num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
+# data loader for classification
+# -----------------------------------------------------------------------------------------------------------------------
+# training
+source_loader_clf_train = DataLoader(source_train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False,
+                                     num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
+# validation
+source_loader_clf_val = DataLoader(source_val_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False,
+                                   num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
+target_loader_clf_val = DataLoader(target_val_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False,
+                                   num_workers=args.num_workers, generator=rng, worker_init_fn=seed_worker)
 
 strangan = StranGAN(device, args)
-strangan.train_gan(source_loader_inf, target_loader_inf, source_loader, target_loader, args)
-strangan.interpret(source_loader, target_loader, args)
+strangan.train_gan(source_loader_da, target_loader_da, source_loader_clf_train, source_loader_clf_val,
+                   target_loader_clf_val, args)
+strangan.interpret(source_loader_clf_val, target_loader_clf_val, args)
